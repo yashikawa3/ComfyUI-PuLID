@@ -29,39 +29,14 @@ folder_paths.folder_names_and_paths["pulid"] = (current_paths, folder_paths.supp
 def convert_v11_attn_keys(state_dict):
     """Convert v1.1 id_adapter_attn_layers keys to cubiq-compatible format.
 
-    v1.1 weights use diffusers ordering (down -> mid -> up) with keys like:
-        {idx}.id_to_k.weight / {idx}.id_to_v.weight
-    cubiq's patching expects:
-        {module_key}.to_k_ip.weight / {module_key}.to_v_ip.weight
-    where module_key uses input -> output -> middle ordering.
-
-    Mapping (diffusers idx -> cubiq module_key):
-        idx  1..47  (down_blocks)     -> 1..47     (same)
-        idx 49..67  (mid_block)       -> 121..139  (+72)
-        idx 69..127 (up_blocks.0)     -> 49..107   (-20)
-        idx 129..139 (up_blocks.1)    -> 109..119  (-20)
+    v1.1 weights indices already match cubiq's module_key ordering,
+    so only key name conversion is needed:
+        {idx}.id_to_k.weight -> {idx}.to_k_ip.weight
+        {idx}.id_to_v.weight -> {idx}.to_v_ip.weight
     """
     converted = {}
     for key, value in state_dict.items():
-        parts = key.split(".")
-        idx = int(parts[0])
-
-        # Map diffusers index to cubiq module_key
-        if idx <= 47:
-            cubiq_key = idx
-        elif 49 <= idx <= 67:
-            cubiq_key = idx + 72
-        elif 69 <= idx <= 127:
-            cubiq_key = idx - 20
-        elif 129 <= idx <= 139:
-            cubiq_key = idx - 20
-        else:
-            continue
-
-        # Convert key names: id_to_k -> to_k_ip, id_to_v -> to_v_ip
-        old_suffix = ".".join(parts[1:])
-        new_suffix = old_suffix.replace("id_to_k", "to_k_ip").replace("id_to_v", "to_v_ip")
-        new_key = f"{cubiq_key}.{new_suffix}"
+        new_key = key.replace("id_to_k", "to_k_ip").replace("id_to_v", "to_v_ip")
         converted[new_key] = value
 
     return converted
